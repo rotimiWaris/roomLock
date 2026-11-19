@@ -238,23 +238,60 @@ export class Room {
   private fitCapturedRoom() {
     const packed = this.splat!.packedSplats;
     if (!packed) throw Error("Room splat data is unavailable.");
-    const axes: number[][] = [[], [], []];
-    const stride = Math.max(1, Math.floor(packed.numSplats / 6000));
-    const rotation = new THREE.Matrix4().makeRotationX(
+    const upright = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
       this.config.upAxis === "Y" ? 0 : -Math.PI / 2,
     );
+    const points: THREE.Vector3[] = [];
+    const stride = Math.max(1, Math.floor(packed.numSplats / 8000));
     packed.forEachSplat((index, center, _scale, _rotation, opacity) => {
       if (index % stride || opacity < 0.05) return;
-      center.applyMatrix4(rotation);
-      [center.x, center.y, center.z].forEach((value, axis) =>
-        axes[axis].push(value),
-      );
+      points.push(center.clone().applyQuaternion(upright));
     });
-    if (axes[0].length < 20)
+    if (points.length < 20)
       throw Error("This capture has too few visible points to fit a room.");
-    axes.forEach((values) => values.sort((a, b) => a - b));
-    const low = axes.map((values) => values[Math.floor(values.length * 0.04)]);
-    const high = axes.map((values) => values[Math.floor(values.length * 0.96)]);
+    const percentiles = (list: THREE.Vector3[], ...fractions: number[]) => {
+      const axes = [0, 1, 2].map((axis) =>
+        list.map((p) => p.getComponent(axis)).sort((a, b) => a - b),
+      );
+      return fractions.map((f) =>
+        axes.map((values) => values[Math.floor((values.length - 1) * f)]),
+      );
+    };
+    // A video panned from one spot comes back as a thin sheet of surfaces,
+    // not a box around the viewer. Standing in the middle of that sheet puts
+    // the camera inside the wall, so the screen fills with blurry, mostly
+    // white splats. Detect the sheet, turn it so it faces the player, and
+    // stand the player in front of it instead.
+    let [low, mid, high] = percentiles(points, 0.04, 0.5, 0.96);
+    const spanX = high[0] - low[0],
+      spanZ = high[2] - low[2];
+    const sheet = Math.min(spanX, spanZ) < Math.max(spanX, spanZ) * 0.45;
+    let turn = 0;
+    if (sheet) {
+      const thin = spanX < spanZ ? 0 : 2;
+      // Stray splats float between the camera and the surfaces it filmed,
+      // so the longer tail along the thin axis points back to the camera.
+      const towardViewer =
+        high[thin] - mid[thin] >= mid[thin] - low[thin] ? 1 : -1;
+      turn =
+        thin === 2
+          ? towardViewer > 0
+            ? 0
+            : Math.PI
+          : towardViewer > 0
+            ? Math.PI / 2
+            : -Math.PI / 2;
+    }
+    const orientation = new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn)
+      .multiply(upright);
+    const facing = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      turn,
+    );
+    points.forEach((p) => p.applyQuaternion(facing));
+    [low, mid, high] = percentiles(points, 0.04, 0.5, 0.96);
     const scale = THREE.MathUtils.clamp(
       2.8 / Math.max(0.1, high[1] - low[1]),
       0.05,
@@ -265,26 +302,46 @@ export class Room {
       -low[1] * scale,
       (-(low[2] + high[2]) * scale) / 2,
     ];
-    this.config.rotation = [
-      this.config.upAxis === "Y" ? 0 : -Math.PI / 2,
-      0,
-      0,
-    ];
+    const euler = new THREE.Euler().setFromQuaternion(orientation);
+    this.config.rotation = [euler.x, euler.y, euler.z];
     this.config.scale = scale;
     this.config.offset = offset;
     const halfX = Math.max(1.2, ((high[0] - low[0]) * scale) / 2);
     const halfZ = Math.max(1.2, ((high[2] - low[2]) * scale) / 2);
-    this.config.camera = [0, 1.5, 0];
-    this.config.lookAt = [0, 1.3, -1];
-    this.config.walkRadius = Math.min(0.9, halfX * 0.6, halfZ * 0.6);
-    this.config.walkBounds = {
-      min: [-halfX + 0.2, 0, -halfZ + 0.2],
-      max: [halfX - 0.2, 2.8, halfZ - 0.2],
-    };
-    this.config.crop = {
-      min: [-halfX, -0.15, -halfZ],
-      max: [halfX, 2.9, halfZ],
-    };
+    if (sheet) {
+      const wall = mid[2] * scale + offset[2];
+      const front = wall + 0.6;
+      const distance = THREE.MathUtils.clamp(halfX * 0.45, 2.2, 4.5);
+      const spawnZ = front + distance;
+      const walkHalf = Math.min(2, halfX * 0.6);
+      this.config.camera = [0, 1.5, spawnZ];
+      this.config.lookAt = [0, 1.3, wall];
+      this.config.walkRadius = Math.min(1.6, distance - 0.4);
+      this.config.walkBounds = {
+        min: [-walkHalf, 0, front],
+        max: [walkHalf, 2.8, spawnZ + 0.6],
+      };
+      this.config.crop = {
+        min: [-halfX, -0.15, -halfZ],
+        max: [halfX, 2.9, wall + 1.2],
+      };
+      this.config.door.position = [0, 0, wall + 0.15];
+    } else {
+      this.config.camera = [0, 1.5, 0];
+      this.config.lookAt = [0, 1.3, -1];
+      this.config.walkRadius = Math.min(0.9, halfX * 0.6, halfZ * 0.6);
+      this.config.walkBounds = {
+        min: [-halfX + 0.2, 0, -halfZ + 0.2],
+        max: [halfX - 0.2, 2.8, halfZ - 0.2],
+      };
+      this.config.crop = {
+        min: [-halfX, -0.15, -halfZ],
+        max: [halfX, 2.9, halfZ],
+      };
+      this.config.door.position = [0, 0, -halfZ + 0.15];
+    }
+    this.config.door.rotation = [0, 0, 0];
+    this.config.heirloom.position = [0, 0, this.config.door.position[2] - 3];
     this.splat!.rotation.set(...this.config.rotation);
     this.splat!.scale.setScalar(scale);
     this.splat!.position.fromArray(offset);
@@ -294,9 +351,8 @@ export class Room {
     this.yaw = this.camera.rotation.y;
     this.pitch = this.camera.rotation.x;
     this.setCrop(this.config.crop);
-    this.config.door.position = [0, 0, -halfZ + 0.15];
-    this.config.heirloom.position = [0, 0, -halfZ - 3];
     this.portal.position.fromArray(this.config.door.position);
+    this.portal.rotation.set(...this.config.door.rotation);
     this.treasure.position.fromArray(this.config.heirloom.position);
   }
   private placeCapturedEvidence() {
@@ -313,7 +369,10 @@ export class Room {
         .find((hit) => hit.distance > 0.5 && hit.distance < 2.4);
       const position = hit
         ? hit.point.clone().addScaledVector(direction, -0.04)
-        : new THREE.Vector3(Math.sin(angle), 0.06, -Math.cos(angle));
+        : this.camera.position
+            .clone()
+            .add(new THREE.Vector3(Math.sin(angle), 0, -Math.cos(angle)))
+            .setY(0.06);
       placement.position = position.toArray();
     });
     this.hooks.placed(structuredClone(this.config));
