@@ -1367,7 +1367,13 @@ export class Room {
             0.55 + Math.sin(now / 400 + group.userData.glintOffset) * 0.25;
           glint.material.depthTest = false;
           glint.renderOrder = 999;
-          glint.scale.setScalar(0.32);
+          // Fixed on-screen size so beacons stay visible from far away.
+          if (glint.material.sizeAttenuation) {
+            glint.material.sizeAttenuation = false;
+            glint.material.needsUpdate = true;
+          }
+          glint.scale.setScalar(0.045);
+          glint.material.color.set(0xff7448);
           glint.position.y = Math.max(0.3, group.userData.size * 1.3);
         } else {
           glint.visible =
@@ -1376,7 +1382,12 @@ export class Room {
             ? Math.sin((phase / 0.9) * Math.PI) * 0.55
             : 0;
           glint.material.depthTest = true;
+          if (!glint.material.sizeAttenuation) {
+            glint.material.sizeAttenuation = true;
+            glint.material.needsUpdate = true;
+          }
           glint.scale.setScalar(0.1);
+          glint.material.color.set(0xffffff);
           glint.position.y = Math.max(0.04, group.userData.size * 0.65);
         }
       }
