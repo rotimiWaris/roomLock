@@ -91,7 +91,12 @@ export class Room {
       alpha: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(
+      Math.min(
+        window.devicePixelRatio,
+        matchMedia("(pointer:coarse)").matches ? 1.25 : 1.5,
+      ),
+    );
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1;
@@ -99,7 +104,10 @@ export class Room {
     this.scene.background = new THREE.Color("#121a18");
     this.spark = new SparkRenderer({
       renderer: this.renderer,
-      maxPixelRadius: 180,
+      maxPixelRadius: 320,
+      // Same projected splat size as the PlayCanvas viewer, which keeps
+      // captured rooms noticeably sharper than Spark's default.
+      focalAdjustment: 2,
       enableLod: false,
     });
     this.scene.add(
@@ -302,6 +310,15 @@ export class Room {
       -low[1] * scale,
       (-(low[2] + high[2]) * scale) / 2,
     ];
+    // Fresh captures carry a lot of faint, oversized splats that read as a
+    // white haze from inside the room. Start with a stricter cleanup and a
+    // wider clear zone around the camera; edit mode can still relax it.
+    this.config.cleanup = {
+      minOpacity: Math.max(this.config.cleanup.minOpacity, 0.08),
+      maxScaleMultiple: Math.min(this.config.cleanup.maxScaleMultiple, 6),
+      nearRadius: Math.max(this.config.cleanup.nearRadius, 0.7),
+    };
+    this.nearShape.radius = this.config.cleanup.nearRadius;
     const euler = new THREE.Euler().setFromQuaternion(orientation);
     this.config.rotation = [euler.x, euler.y, euler.z];
     this.config.scale = scale;
