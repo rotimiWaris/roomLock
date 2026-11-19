@@ -59,6 +59,7 @@ export default function App() {
   const [editId, setEditId] = useState("");
   const [editText, setEditText] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
+  const [view, setView] = useState<"overview" | "walk">("overview");
   const all = useRef<Clue[]>(clues);
   const began = useRef(Date.now());
   useEffect(() => {
@@ -142,6 +143,7 @@ export default function App() {
         setConfig(c);
         setEditText(JSON.stringify(c, null, 2));
         try {
+          setView("overview");
           engine.current = new Room(host.current!, c, {
             inspect: (id) =>
               setSelected(all.current.find((c) => c.id === id) ?? null),
@@ -276,6 +278,7 @@ export default function App() {
     setFraction(null);
     setEditId("");
     setPanel("brief");
+    setView("overview");
     setReloadRoom((n) => n + 1);
   }
   useEffect(() => {
@@ -435,6 +438,18 @@ export default function App() {
             <button onClick={() => setPanel("plant")}>
               <span>＋</span> Plant evidence
             </button>
+            <button
+              aria-pressed={view === "walk"}
+              onClick={() => {
+                const next = view === "overview" ? "walk" : "overview";
+                setView(next);
+                engine.current?.setView(next);
+              }}
+              title="Switch between the overview and walking inside the room"
+            >
+              <span>{view === "overview" ? "◎" : "⛶"}</span>{" "}
+              {view === "overview" ? "Overview · Walk" : "Walk · Overview"}
+            </button>
             <button onClick={newCase} title="Hide the clues somewhere new">
               <span>↻</span> New case
             </button>
@@ -453,36 +468,39 @@ export default function App() {
             </button>
           </nav>
           <div className="controls-note">
-            WASD to move · Drag to look · Click to inspect · Double-click for
-            mouse look · Esc releases
+            {view === "overview"
+              ? "Drag to orbit · Scroll or pinch to zoom · Right-drag to pan · WASD to fly · Q/E or Space/Shift for down and up · Click a glowing clue"
+              : "WASD to move · Drag to look · Click to inspect · Double-click for mouse look · Esc releases"}
           </div>
-          <div className="mobile-controls">
-            <button
-              aria-label="Move left"
-              onClick={() => engine.current?.move(0, -1)}
-            >
-              ←
-            </button>
-            <button
-              aria-label="Move forward"
-              onClick={() => engine.current?.move(1, 0)}
-            >
-              ↑
-            </button>
-            <button
-              aria-label="Move backward"
-              onClick={() => engine.current?.move(-1, 0)}
-            >
-              ↓
-            </button>
-            <button
-              aria-label="Move right"
-              onClick={() => engine.current?.move(0, 1)}
-            >
-              →
-            </button>
-            <span>Drag to look · Tap floor to move</span>
-          </div>
+          {view === "walk" && (
+            <div className="mobile-controls">
+              <button
+                aria-label="Move left"
+                onClick={() => engine.current?.move(0, -1)}
+              >
+                ←
+              </button>
+              <button
+                aria-label="Move forward"
+                onClick={() => engine.current?.move(1, 0)}
+              >
+                ↑
+              </button>
+              <button
+                aria-label="Move backward"
+                onClick={() => engine.current?.move(-1, 0)}
+              >
+                ↓
+              </button>
+              <button
+                aria-label="Move right"
+                onClick={() => engine.current?.move(0, 1)}
+              >
+                →
+              </button>
+              <span>Drag to look · Tap floor to move</span>
+            </div>
+          )}
         </>
       )}
       {toast && (
