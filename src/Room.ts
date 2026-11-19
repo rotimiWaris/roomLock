@@ -408,6 +408,9 @@ export class Room {
     const flatSurfaceAt = (x: number, z: number) => {
       const y = surfaceAt(x, z);
       if (y === null || y > 1.05) return null;
+      // Splat ray hits are sparse, so ignore misses but reject any
+      // neighbour that disagrees, and ask for at least one that agrees.
+      let agree = 0;
       for (const [dx, dz] of [
         [0.12, 0],
         [-0.12, 0],
@@ -415,9 +418,11 @@ export class Room {
         [0, -0.12],
       ]) {
         const near = surfaceAt(x + dx, z + dz);
-        if (near === null || Math.abs(near - y) > 0.07) return null;
+        if (near === null) continue;
+        if (Math.abs(near - y) > 0.1) return null;
+        agree++;
       }
-      return y;
+      return agree ? y : null;
     };
     const visible = (point: THREE.Vector3) => {
       const target = point.clone().setY(point.y + 0.08);
@@ -468,7 +473,7 @@ export class Room {
         any ??= candidate.clone();
         if (placed.some((p) => p.distanceTo(candidate) < 0.8)) continue;
         spaced ??= candidate.clone();
-        const y = attempt < 40 ? flatSurfaceAt(candidate.x, candidate.z) : 0;
+        const y = attempt < 50 ? flatSurfaceAt(candidate.x, candidate.z) : 0;
         if (y === null) continue;
         candidate.y = y;
         if (!visible(candidate)) continue;
