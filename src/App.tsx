@@ -126,6 +126,7 @@ export default function App() {
           const saved = readRoomEdits("demo");
           if (saved) c = { ...c, ...saved };
         }
+        c.seed = caseSeed();
         try {
           const saved = JSON.parse(
             localStorage.getItem("roomlock.cleanup." + c.url) ?? "null",
@@ -260,12 +261,36 @@ export default function App() {
       setToast("Could not delete this room from browser storage.");
     }
   }
+  function newCase() {
+    const url = new URL(location.href);
+    url.searchParams.set("seed", String(freshSeed()));
+    history.replaceState(null, "", url);
+    setStarted(false);
+    setClosed(false);
+    setSolving(false);
+    setReady(false);
+    setPinned([]);
+    setSelected(null);
+    setAccusation("");
+    setElapsed(0);
+    setFraction(null);
+    setEditId("");
+    setPanel("brief");
+    setReloadRoom((n) => n + 1);
+  }
+  useEffect(() => {
+    if (selected && !pinned.includes(selected.id)) pinClue(selected);
+    // Inspecting a clue files it on the board straight away.
+  }, [selected]);
   function pin() {
-    if (!selected) return;
-    if (!pinned.includes(selected.id)) {
-      const next = [...pinned, selected.id];
+    if (selected) pinClue(selected);
+    setSelected(null);
+  }
+  function pinClue(clue: Clue) {
+    if (!pinned.includes(clue.id)) {
+      const next = [...pinned, clue.id];
       setPinned(next);
-      engine.current?.pin(selected.id);
+      engine.current?.pin(clue.id);
       const n = next.filter((id) => clues.some((c) => c.id === id)).length;
       engine.current?.react(n);
       setToast(
@@ -276,7 +301,6 @@ export default function App() {
             : "Evidence pinned to your timeline.",
       );
     }
-    setSelected(null);
   }
   function accuse(id: string) {
     if (caseCount < 4) return;
@@ -410,6 +434,9 @@ export default function App() {
             )}
             <button onClick={() => setPanel("plant")}>
               <span>＋</span> Plant evidence
+            </button>
+            <button onClick={newCase} title="Hide the clues somewhere new">
+              <span>↻</span> New case
             </button>
             <button
               aria-label="Get a hint"
@@ -892,4 +919,16 @@ export default function App() {
       )}
     </main>
   );
+}
+function freshSeed() {
+  return Math.floor(Math.random() * 900000) + 100000;
+}
+function caseSeed() {
+  const url = new URL(location.href);
+  const seed = Number(url.searchParams.get("seed"));
+  if (Number.isSafeInteger(seed) && seed > 0) return seed;
+  const fresh = freshSeed();
+  url.searchParams.set("seed", String(fresh));
+  history.replaceState(null, "", url);
+  return fresh;
 }
