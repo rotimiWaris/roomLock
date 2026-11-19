@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   SplatMesh,
   SparkRenderer,
@@ -59,6 +60,19 @@ export class Room {
   private splatCenters = new Float32Array();
   cleanupStats = { total: 0, kept: 0, medianScale: 0 };
   private focused: string | null = null;
+  view: "overview" | "walk" = "overview";
+  private orbit: OrbitControls;
+  private hover?: THREE.Vector2;
+  private walkPose?: { position: THREE.Vector3; yaw: number; pitch: number };
+  private orbitPose?: { position: THREE.Vector3; target: THREE.Vector3 };
+  private tween?: {
+    start: number;
+    fromPosition: THREE.Vector3;
+    fromQuaternion: THREE.Quaternion;
+    toPosition: THREE.Vector3;
+    toQuaternion: THREE.Quaternion;
+    done: () => void;
+  };
   private focusAt = 0;
   private ambient = new THREE.HemisphereLight(0xece6d2, 0x373a30, 1.2);
   private torch = new THREE.SpotLight(0xffe5ae, 0, 14, 0.65, 0.8);
@@ -146,6 +160,17 @@ export class Room {
     nearCut.add(this.nearShape);
     this.scene.add(nearCut);
     this.setupFinale();
+    this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbit.enableDamping = true;
+    this.orbit.dampingFactor = 0.08;
+    this.orbit.screenSpacePanning = true;
+    this.orbit.maxPolarAngle = Math.PI * 0.49;
+    this.orbit.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN,
+    };
+    this.orbit.enabled = false;
+    this.frameOverview();
     this.bindControls();
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(host);
@@ -181,6 +206,7 @@ export class Room {
       if (this.config.captured && !this.config.calibrated)
         this.fitCapturedRoom();
       this.prepareCleanup();
+      this.frameOverview();
       if (!this.config.evidenceEdited) {
         await this.spark.update({ scene: this.scene, camera: this.camera });
         if (this.disposed) return;
@@ -204,6 +230,7 @@ export class Room {
         return;
       }
       this.practiceRoom();
+      this.frameOverview();
       if (!this.config.evidenceEdited)
         this.scatterEvidence(this.config.seed ?? 1);
       roomMode = "Practice room";
@@ -927,10 +954,18 @@ export class Room {
             "ArrowDown",
             "ArrowLeft",
             "ArrowRight",
-          ].includes(e.code)
+            "Space",
+          ].includes(e.code) &&
+          this.active
         )
           e.preventDefault();
-        if (e.code === "KeyE" && this.active && !this.blocked) this.pick(0, 0);
+        if (
+          e.code === "KeyE" &&
+          this.view === "walk" &&
+          this.active &&
+          !this.blocked
+        )
+          this.pick(0, 0);
       },
       { signal },
     );
@@ -956,6 +991,21 @@ export class Room {
       "pointermove",
       (e) => {
         if (!this.active || this.blocked) return;
+        const rect = canvas.getBoundingClientRect();
+        this.hover = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          (-(e.clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        if (this.view === "overview") {
+          if (this.pointer) {
+            this.pointer.travel +=
+              Math.abs(e.clientX - this.pointer.x) +
+              Math.abs(e.clientY - this.pointer.y);
+            this.pointer.x = e.clientX;
+            this.pointer.y = e.clientY;
+          }
+          return;
+        }
         const locked = document.pointerLockElement === canvas;
         if (!locked && !this.pointer) return;
         const dx = locked ? e.movementX : e.clientX - this.pointer!.x,
@@ -994,7 +1044,12 @@ export class Room {
     canvas.addEventListener(
       "dblclick",
       () => {
-        if (this.active && !this.blocked && !this.editId)
+        if (
+          this.active &&
+          !this.blocked &&
+          !this.editId &&
+          this.view === "walk"
+        )
           void canvas.requestPointerLock?.();
       },
       { signal },
@@ -1037,7 +1092,7 @@ export class Room {
       this.hooks.inspect(object);
       return;
     }
-    if (touch) {
+    if (touch && this.view === "walk") {
       const point = this.ray.ray.intersectPlane(
         new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
         new THREE.Vector3(),
@@ -1048,6 +1103,87 @@ export class Room {
         this.walkTarget = point;
       }
     }
+  }
+  /** Frame the whole room from outside and above, clear of the haze. */
+  private frameOverview() {
+    const { min, max } = this.config.crop;
+    const center = new THREE.Vector3(
+      (min[0] + max[0]) / 2,
+      Math.min(1.2, (min[1] + max[1]) / 2),
+      (min[2] + max[2]) / 2,
+    );
+    const radius = Math.max(
+      1.5,
+      Math.hypot(max[0] - min[0], max[2] - min[2]) / 2,
+    );
+    const spawn = new THREE.Vector3(...this.config.camera);
+    const side = new THREE.Vector3(spawn.x - center.x, 0, spawn.z - center.z);
+    if (side.lengthSq() < 0.01) side.set(0.35, 0, 1);
+    side.normalize();
+    const distance = Math.min(radius * 1.5, 14);
+    const position = center
+      .clone()
+      .addScaledVector(side, distance)
+      .add(new THREE.Vector3(0, distance * 0.75, 0));
+    this.orbit.target.copy(center);
+    this.orbit.minDistance = 0.4;
+    this.orbit.maxDistance = Math.max(6, distance * 2.2);
+    this.orbitPose = { position, target: center.clone() };
+    this.walkPose = {
+      position: spawn.clone(),
+      yaw: this.yaw,
+      pitch: this.pitch,
+    };
+    if (this.view === "overview" && !this.tween) {
+      this.camera.position.copy(position);
+      this.camera.lookAt(center);
+      this.orbit.update();
+    }
+  }
+  setView(view: "overview" | "walk") {
+    if (view === this.view || this.finishedAt) return;
+    const fromPosition = this.camera.position.clone(),
+      fromQuaternion = this.camera.quaternion.clone();
+    const probe = new THREE.Object3D();
+    probe.rotation.order = "YXZ";
+    if (view === "walk") {
+      this.orbitPose = {
+        position: this.camera.position.clone(),
+        target: this.orbit.target.clone(),
+      };
+      const pose = this.walkPose!;
+      probe.position.copy(pose.position);
+      probe.rotation.set(pose.pitch, pose.yaw, 0, "YXZ");
+    } else {
+      this.walkPose = {
+        position: this.camera.position.clone(),
+        yaw: this.yaw,
+        pitch: this.pitch,
+      };
+      const pose = this.orbitPose!;
+      probe.position.copy(pose.position);
+      probe.lookAt(pose.target);
+    }
+    this.view = view;
+    this.orbit.enabled = false;
+    this.walkTarget = undefined;
+    document.exitPointerLock?.();
+    this.tween = {
+      start: performance.now(),
+      fromPosition,
+      fromQuaternion,
+      toPosition: probe.position.clone(),
+      toQuaternion: probe.quaternion.clone(),
+      done: () => {
+        if (view === "walk") {
+          this.yaw = this.walkPose!.yaw;
+          this.pitch = this.walkPose!.pitch;
+        } else {
+          this.orbit.target.copy(this.orbitPose!.target);
+          this.orbit.update();
+        }
+      },
+    };
   }
   private highlight(id: string | null, on: boolean) {
     const group = id ? this.models.get(id) : undefined;
@@ -1060,7 +1196,11 @@ export class Room {
       for (const material of materials)
         if (material instanceof THREE.MeshStandardMaterial) {
           material.emissive.set(on ? 0xffd27a : 0x000000);
-          material.emissiveIntensity = on ? 0.35 : 0;
+          material.emissiveIntensity = on
+            ? this.view === "overview"
+              ? 0.6
+              : 0.35
+            : 0;
         }
     });
     const marker = group.getObjectByName("marker");
@@ -1069,9 +1209,9 @@ export class Room {
   private evidenceInReach(): string | null {
     const hit = this.ray
       .intersectObjects([...this.models.values()], true)
-      .find((h) => h.distance <= 2.2);
+      .find((h) => h.distance <= (this.view === "overview" ? 80 : 2.2));
     if (!hit) return null;
-    if (this.splat) {
+    if (this.splat && this.view === "walk") {
       const surface = this.ray
         .intersectObject(this.splat)
         .find((h) => h.distance >= this.config.cleanup.nearRadius);
@@ -1099,7 +1239,75 @@ export class Room {
     if (this.disposed) return;
     const dt = Math.min((now - this.last) / 1000, 0.05);
     this.last = now;
-    if (this.active && !this.blocked) {
+    this.orbit.enabled =
+      this.view === "overview" &&
+      this.active &&
+      !this.blocked &&
+      !this.tween &&
+      !this.finishedAt;
+    if (this.tween) {
+      const t = Math.min(1, (now - this.tween.start) / 1000);
+      const q = t * t * (3 - 2 * t);
+      this.camera.position.lerpVectors(
+        this.tween.fromPosition,
+        this.tween.toPosition,
+        q,
+      );
+      this.camera.quaternion.slerpQuaternions(
+        this.tween.fromQuaternion,
+        this.tween.toQuaternion,
+        q,
+      );
+      if (t >= 1) {
+        const done = this.tween.done;
+        this.tween = undefined;
+        done();
+      }
+    } else if (this.view === "overview" && this.orbit.enabled) {
+      // Free flight on all three axes: WASD along the view, Q/E or
+      // Space/Shift straight down and up. The orbit centre travels along.
+      const f =
+        Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
+        Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
+      const s =
+        Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
+        Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
+      const u =
+        Number(this.keys.has("KeyE") || this.keys.has("Space")) -
+        Number(
+          this.keys.has("KeyQ") ||
+            this.keys.has("ShiftLeft") ||
+            this.keys.has("ShiftRight"),
+        );
+      if (f || s || u) {
+        const forward = this.camera.getWorldDirection(new THREE.Vector3());
+        const right = forward.clone().cross(this.camera.up).normalize();
+        const step = new THREE.Vector3()
+          .addScaledVector(forward, f)
+          .addScaledVector(right, s)
+          .addScaledVector(this.camera.up, u)
+          .normalize()
+          .multiplyScalar(dt * 2.4);
+        this.camera.position.add(step);
+        this.orbit.target.add(step);
+      }
+      const { min, max } = this.config.crop;
+      const margin = 2;
+      this.orbit.target.set(
+        THREE.MathUtils.clamp(
+          this.orbit.target.x,
+          min[0] - margin,
+          max[0] + margin,
+        ),
+        THREE.MathUtils.clamp(this.orbit.target.y, -0.5, 3.5),
+        THREE.MathUtils.clamp(
+          this.orbit.target.z,
+          min[2] - margin,
+          max[2] + margin,
+        ),
+      );
+      this.orbit.update();
+    } else if (this.view === "walk" && this.active && !this.blocked) {
       const f =
         Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
         Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
@@ -1131,7 +1339,12 @@ export class Room {
     if (now - this.focusAt > 100) {
       this.focusAt = now;
       this.camera.updateMatrixWorld(true);
-      this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+      this.ray.setFromCamera(
+        this.view === "overview"
+          ? (this.hover ?? new THREE.Vector2(0, 0))
+          : new THREE.Vector2(0, 0),
+        this.camera,
+      );
       const focused =
         this.active && !this.blocked && !this.editId
           ? this.evidenceInReach()
@@ -1147,11 +1360,25 @@ export class Room {
       const glint = group.getObjectByName("glint") as THREE.Sprite | undefined;
       if (glint) {
         const phase = (now / 1000 + group.userData.glintOffset) % 5.5;
-        glint.visible =
-          !this.pinned.has(group.userData.id) && this.active && phase < 0.9;
-        glint.material.opacity = glint.visible
-          ? Math.sin((phase / 0.9) * Math.PI) * 0.55
-          : 0;
+        if (this.view === "overview") {
+          // From a distance a steady beacon above each clue keeps it findable.
+          glint.visible = !this.pinned.has(group.userData.id) && this.active;
+          glint.material.opacity =
+            0.55 + Math.sin(now / 400 + group.userData.glintOffset) * 0.25;
+          glint.material.depthTest = false;
+          glint.renderOrder = 999;
+          glint.scale.setScalar(0.32);
+          glint.position.y = Math.max(0.3, group.userData.size * 1.3);
+        } else {
+          glint.visible =
+            !this.pinned.has(group.userData.id) && this.active && phase < 0.9;
+          glint.material.opacity = glint.visible
+            ? Math.sin((phase / 0.9) * Math.PI) * 0.55
+            : 0;
+          glint.material.depthTest = true;
+          glint.scale.setScalar(0.1);
+          glint.position.y = Math.max(0.04, group.userData.size * 0.65);
+        }
       }
       const marker = group.getObjectByName("marker");
       if (marker) marker.rotation.z = now * 0.0003;
@@ -1200,6 +1427,7 @@ export class Room {
   dispose() {
     this.disposed = true;
     this.abort.abort();
+    this.orbit.dispose();
     this.observer.disconnect();
     this.renderer.setAnimationLoop(null);
     this.splat?.dispose();
