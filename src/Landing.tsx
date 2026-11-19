@@ -88,9 +88,9 @@ export default function Landing({
               className="launch-button"
               disabled={!canPlay}
               onClick={openCase}
-              aria-label={ready ? "Open case file" : "Preparing the room"}
+              aria-label={ready ? "Start the case" : "Preparing the room"}
             >
-              {ready ? "Open case file" : "Preparing the room…"}{" "}
+              {ready ? "Start the case" : "Preparing the room…"}{" "}
               <span aria-hidden="true">↗</span>
             </button>
             <a className="launch-secondary" href="#captured-rooms">
