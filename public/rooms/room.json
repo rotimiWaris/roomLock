@@ -190,5 +190,7 @@
     "minOpacity": 0.02,
     "maxScaleMultiple": 10,
     "nearRadius": 0.3
-  }
+  },
+  "captured": true,
+  "upAxis": "Z"
 }
