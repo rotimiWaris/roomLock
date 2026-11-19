@@ -8,6 +8,7 @@ import {
   type ScanProgress,
 } from "./scan-client";
 import "./scan.css";
+import { saveRoom } from "./room-storage";
 
 const storageKey = "roomlock.scan.v1";
 type Session = {
@@ -15,6 +16,7 @@ type Session = {
   url?: string;
   job?: ScanJob;
   room?: SavedRoom;
+  sourceVideoName?: string;
 };
 function readSession(): Session {
   try {
@@ -93,6 +95,7 @@ export default function ScanRoom({
           const room = await scanRequest<SavedRoom>("save", {
             token: session.job!.token,
           });
+          saveRoom(room, sessionRef.current.sourceVideoName ?? "Scanned room");
           if (!active) return;
           save({ ...sessionRef.current, room });
           setProgress({
@@ -179,7 +182,10 @@ export default function ScanRoom({
         if (!alive.current) return;
         const upload = await uploadVideo(compressed.current, setProgress);
         ({ proof, url } = upload);
-        save(upload);
+        save({
+          ...upload,
+          sourceVideoName: file?.name ?? sessionRef.current.sourceVideoName,
+        });
         if (!alive.current) return;
       }
       setProgress({
@@ -189,7 +195,13 @@ export default function ScanRoom({
           "Validating the MP4, transferring it to Aholo, and starting reconstruction. This may take a minute.",
       });
       const job = await scanRequest<ScanJob>("start", { proof, url });
-      if (alive.current) save({ proof, url, job });
+      if (alive.current)
+        save({
+          proof,
+          url,
+          job,
+          sourceVideoName: file?.name ?? sessionRef.current.sourceVideoName,
+        });
     } catch (cause) {
       if (alive.current) {
         setError(String(cause instanceof Error ? cause.message : cause));

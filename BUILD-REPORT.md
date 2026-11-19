@@ -27,7 +27,7 @@ Scan your room compresses the first 60 seconds in the browser to silent H.264 at
 
 - The landing page includes a captured-room gallery with three real in-game stills, fullscreen previews, and case launch links. Cinzel, Space Grotesk, Inter, and Geist Mono loaded successfully in browser checks. Desktop and 390 px / 320 px phone layouts have no horizontal overflow; gallery switching, preview navigation, and launching from the footer pass.
 - Production type check and build pass.
-- Nineteen automated tests cover status classification, task token protection, prompt validation, account concurrency, credential redaction, direct-upload verification, reconstruction progress, and streamed room storage.
+- Twenty-seven automated tests cover status classification, task token protection, prompt validation, account concurrency, credential redaction, direct-upload verification, reconstruction progress, and streamed room storage.
 - The revised encoder passed a real phone-orientation fixture: 720 by 1280 portrait output, H.264 High profile, yuv420p, 15 fps, no audio, and moov before mdat. A nine-second clip was rejected. The resulting MP4 uploaded through public Blob storage and the server-side Aholo asset SDK, which returned a holo-cos URL. FAILED-world recovery clears the old session and stops polling.
 - Real browser compression trimmed a 65-second clip to 60 seconds, removed audio, produced H.264 at 15 fps and 8.65 MB, and emitted real progress events. A real multipart upload of that clip to Aholo passed without submitting a reconstruction job.
 - The scan browser flow passed simulated provider progress, a storage failure and retry, loading a captured room, reaching all six clues, and case completion.
@@ -39,6 +39,7 @@ Scan your room compresses the first 60 seconds in the browser to silent H.264 at
 - Every optimized GLB was decoded and its texture format and dimensions checked.
 - Source, generated client files, and local response logs were checked for the configured credential; none contained it.
 
+- Saved-room records and camera/evidence edits persist in browser storage by world ID. Active captures restore before the upload screen, and mode switching uses client-side history. Recovery reuses Blob files or saves a current Aholo SPZ download.
 ## Practical limits
 
 - Vercel configuration is provided; deployment has not been performed.

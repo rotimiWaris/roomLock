@@ -306,3 +306,57 @@ test("server errors redact the configured API key", async () => {
   assert.equal(result.statusCode, 502);
   assert.match(result.body.error, /REDACTED/);
 });
+
+test("recover validates world IDs and reuses an existing Blob without an expiring source URL", async () => {
+  assert.equal((await call("recover", { worldId: "../bad" })).statusCode, 400);
+  const result = await call(
+    "recover",
+    { worldId: "saved-world" },
+    {
+      fetch: async (url) => {
+        assert.ok(url.endsWith("/saved-world"));
+        return response({ status: "SUCCEEDED" });
+      },
+      head: async () => ({
+        url: "https://store.public.blob.vercel-storage.com/saved-world.spz",
+      }),
+    },
+  );
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.worldId, "saved-world");
+});
+test("recover downloads and saves a completed world and reports unfinished worlds", async () => {
+  let bytes = 0;
+  const result = await call(
+    "recover",
+    { worldId: "fresh-world" },
+    {
+      fetch: async (url) =>
+        url.includes("/world/v1/")
+          ? response({
+              status: "SUCCEEDED",
+              assets: {
+                splats: {
+                  urls: { spzPath: "https://cdn.example.test/fresh.spz" },
+                },
+              },
+            })
+          : new Response(new Uint8Array([1, 2, 3])),
+      head: async () => {
+        throw new BlobNotFoundError();
+      },
+      put: async (path, stream) => {
+        for await (const chunk of stream) bytes += chunk.length;
+        return { url: "https://store.public.blob.vercel-storage.com/" + path };
+      },
+    },
+  );
+  assert.equal(result.statusCode, 200);
+  assert.equal(bytes, 3);
+  const failed = await call(
+    "recover",
+    { worldId: "unfinished" },
+    { fetch: async () => response({ status: "FAILED" }) },
+  );
+  assert.match(failed.body.error, /unfinished.*FAILED/);
+});

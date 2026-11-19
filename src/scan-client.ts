@@ -15,7 +15,9 @@ export async function scanRequest<T>(action: string, body: object): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(
-      action === "save" || action === "start" ? 300000 : 60000,
+      action === "save" || action === "start" || action === "recover"
+        ? 300000
+        : 60000,
     ),
   });
   const text = await response.text();

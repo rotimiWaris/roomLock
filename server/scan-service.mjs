@@ -292,8 +292,15 @@ export async function handleScan(req, res, deps = {}) {
         throw Error("No world ID returned: " + JSON.stringify(created));
       return send(res, 200, result(created));
     }
-    if (action === "status" || action === "save") {
-      const { worldId } = readScan(body.token, "world", key);
+    if (action === "status" || action === "save" || action === "recover") {
+      if (
+        action === "recover" &&
+        (typeof body.worldId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,100}$/.test(body.worldId))
+      )
+        return send(res, 400, { error: "Enter a valid worldId." });
+      const { worldId } =
+        action === "recover" ? body : readScan(body.token, "world", key);
       const detail = await upstream(
         "/global/world/v1/" + encodeURIComponent(worldId),
       );
@@ -305,12 +312,7 @@ export async function handleScan(req, res, deps = {}) {
           raw: detail,
         });
       if (detail.status !== "SUCCEEDED")
-        throw Error("Room is not complete: " + JSON.stringify(detail));
-      const source = detail.assets?.splats?.urls?.spzPath;
-      if (!source || new URL(source).protocol !== "https:")
-        throw Error(
-          "Completed room has no valid SPZ download: " + JSON.stringify(detail),
-        );
+        throw Error(`Room ${worldId} is not complete (${detail.status}).`);
       const pathname = `rooms/${encodeURIComponent(worldId)}.spz`;
       try {
         const existing = await metadata(pathname);
@@ -322,11 +324,18 @@ export async function handleScan(req, res, deps = {}) {
       } catch (error) {
         if (!(error instanceof BlobNotFoundError)) throw error;
       }
+      const source = detail.assets?.splats?.urls?.spzPath;
+      if (!source || new URL(source).protocol !== "https:")
+        throw Error(
+          `Room ${worldId} has no valid SPZ download URL. The capture may have expired.`,
+        );
       const download = await request(source, {
         signal: AbortSignal.timeout(180000),
       });
       if (!download.ok || !download.body)
-        throw Error(`SPZ download HTTP ${download.status}`);
+        throw Error(
+          `Room ${worldId}: SPZ download HTTP ${download.status}. The Aholo download link may have expired; try loading the world ID again.`,
+        );
       const saved = await store(pathname, download.body, {
         access: "public",
         contentType: "application/octet-stream",

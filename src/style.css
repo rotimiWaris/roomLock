@@ -998,3 +998,57 @@ progress::-webkit-progress-value {
     gap: 13px;
   }
 }
+.room-library-bar {
+  position: fixed;
+  right: 16px;
+  top: 115px;
+  z-index: 9;
+  display: flex;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+}
+.room-library-bar button,
+.room-load-error button {
+  padding: 9px 12px;
+  background: #121722ee;
+  border: 1px solid #687d9f;
+  color: #e4e8ef;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.room-load-error {
+  position: fixed;
+  top: 165px;
+  left: 5%;
+  right: 5%;
+  z-index: 9;
+  background: #261c22;
+  border: 1px solid #b36a64;
+  padding: 18px;
+  color: #ffd5c9;
+}
+.room-load-error button {
+  display: block;
+  margin-top: 12px;
+}
+.saved-rooms select,
+.saved-rooms input {
+  width: 100%;
+  background: #111722;
+  color: #edf0f6;
+  border: 1px solid #687d9f;
+  padding: 12px;
+  margin: 8px 0 14px;
+}
+.saved-rooms form {
+  margin: 24px 0;
+}
+.saved-rooms form label {
+  display: block;
+}
+@media (max-width: 800px) {
+  .room-library-bar {
+    top: 90px;
+    right: 10px;
+  }
+}

@@ -100,6 +100,16 @@ The first performs a real browser encode and checks trimming, codec, audio remov
 
 `node scripts/scan-storage-check.mjs` saves an existing successful Aholo reconstruction to the configured Blob store, downloads it to verify its size, and checks that retrying reuses the saved room. It writes its result into ignored `artifacts/`. With the dev server on port 5174, `node scripts/scan-stored-room-check.mjs` then checks loading that actual Blob URL into the game. Neither check starts a new reconstruction.
 
+## Saved rooms and editing
+
+Completed captures are copied to Blob before their temporary download links expire. The browser keeps records in `roomlock.rooms` and the selected record in `roomlock.activeRoom`, including world ID, permanent Blob URL, creation time, source video filename, and up-axis. Reloading any URL, including `?edit=1`, restores the selected room. Existing completed scan sessions migrate into the library.
+
+Use Saved rooms to select a capture or recover one by world ID. Recovery requests the current Aholo world details and copies an available SPZ into Blob; it cannot recover an expired source that is no longer available and was never saved. Delete room removes the record and its edits from this browser; online files remain available. Browser storage is local to this browser and origin.
+
+Edit room and Play mode change the query with browser history without reloading the page or scene. Surface-click evidence placements, cleanup settings, applied room JSON, and the Save current camera as spawn action persist under `roomlock.edits.<worldId>`. Saved configurations bypass automatic room fitting and evidence placement. Failed saved-room loads display their world ID and a recovery option.
+
+Run `node scripts/room-persistence-check.mjs` with the development server on port 5174 to verify restoration, mode switching, room selection, deletion, recovery, and saved-file errors using local room data.
+
 ## Vercel
 
 Import this project, select the Vite preset, build with `npm run build`, and use `dist` as the output directory. Set `AHOLO_API_KEY` as a server environment variable. The `/api` directory contains the live generation functions. Never use a `VITE_` prefix for the secret. `.vercelignore` excludes local originals, logs, screenshots, and environment files.

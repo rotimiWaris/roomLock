@@ -6,18 +6,47 @@ import Plant from "./Plant";
 import Landing from "./Landing";
 import ScanRoom from "./ScanRoom";
 import type { SavedRoom } from "./scan-client";
+import SavedRooms from "./SavedRooms";
+import {
+  readActiveRoom,
+  readRooms,
+  saveRoom,
+  activateRoom,
+  deleteRoom,
+  readRoomEdits,
+  saveRoomEdits,
+  roomsChanged,
+  type RoomRecord,
+} from "./room-storage";
 type Panel =
-  "brief" | "board" | "suspects" | "plant" | "about" | "create" | "scan" | null;
+  | "brief"
+  | "board"
+  | "suspects"
+  | "plant"
+  | "about"
+  | "create"
+  | "scan"
+  | "rooms"
+  | null;
 export default function App() {
-  const [scannedRoom, setScannedRoom] = useState<SavedRoom | null>(null);
+  const [scannedRoom, setScannedRoom] = useState<RoomRecord | null>(
+    readActiveRoom,
+  );
+  const [rooms, setRooms] = useState<RoomRecord[]>(readRooms);
+  const [edit, setEdit] = useState(
+    () => new URLSearchParams(location.search).get("edit") === "1",
+  );
   const host = useRef<HTMLDivElement>(null),
     engine = useRef<Room | null>(null);
   const [config, setConfig] = useState<RoomConfig | null>(null);
   const [mode, setMode] = useState("Loading room");
   const [fraction, setFraction] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
-  const [started, setStarted] = useState(false);
-  const [panel, setPanel] = useState<Panel>(null);
+  const [reloadRoom, setReloadRoom] = useState(0);
+  const [started, setStarted] = useState(!!scannedRoom && edit);
+  const [panel, setPanel] = useState<Panel>(() =>
+    scannedRoom ? (edit ? null : "brief") : "scan",
+  );
   const [selected, setSelected] = useState<Clue | null>(null);
   const [pinned, setPinned] = useState<string[]>([]);
   const [extras, setExtras] = useState<Clue[]>([]);
@@ -31,8 +60,45 @@ export default function App() {
   const [editText, setEditText] = useState("");
   const [focused, setFocused] = useState<string | null>(null);
   const all = useRef<Clue[]>(clues);
-  const began = useRef(0);
-  const edit = new URLSearchParams(location.search).get("edit") === "1";
+  const began = useRef(Date.now());
+  useEffect(() => {
+    const changed = () => setRooms(readRooms());
+    const navigation = () => {
+      setEdit(new URLSearchParams(location.search).get("edit") === "1");
+      setEditId("");
+      if (engine.current) engine.current.editId = "";
+    };
+    window.addEventListener(roomsChanged, changed);
+    window.addEventListener("storage", changed);
+    window.addEventListener("popstate", navigation);
+    return () => {
+      window.removeEventListener(roomsChanged, changed);
+      window.removeEventListener("storage", changed);
+      window.removeEventListener("popstate", navigation);
+    };
+  }, []);
+  function toggleEdit() {
+    const url = new URL(location.href);
+    if (edit) url.searchParams.delete("edit");
+    else url.searchParams.set("edit", "1");
+    history.pushState(null, "", url);
+    setEdit(!edit);
+    setEditId("");
+    if (engine.current) engine.current.editId = "";
+  }
+  function rememberEdits(c: RoomConfig) {
+    setConfig(c);
+    setEditText(JSON.stringify(c, null, 2));
+    try {
+      saveRoomEdits(scannedRoom?.worldId ?? "demo", c);
+      return true;
+    } catch {
+      setToast(
+        "Your browser could not save room edits. Enable local storage and try again.",
+      );
+      return false;
+    }
+  }
   const caseCount = pinned.filter((id) =>
     clues.some((c) => c.id === id),
   ).length;
@@ -46,12 +112,19 @@ export default function App() {
       .then((c: RoomConfig) => {
         if (!live) return;
         if (scannedRoom) {
-          c.url = scannedRoom.url;
+          const saved = readRoomEdits(scannedRoom.worldId);
+          if (saved) c = { ...c, ...saved, calibrated: true };
+          c.url = scannedRoom.blobUrl;
           c.captured = true;
           c.upAxis = scannedRoom.upAxis;
-          c.rotation = [scannedRoom.upAxis === "Y" ? 0 : -Math.PI / 2, 0, 0];
-          c.scale = 1;
-          c.offset = [0, 0, 0];
+          if (!saved) {
+            c.rotation = [scannedRoom.upAxis === "Y" ? 0 : -Math.PI / 2, 0, 0];
+            c.scale = 1;
+            c.offset = [0, 0, 0];
+          }
+        } else {
+          const saved = readRoomEdits("demo");
+          if (saved) c = { ...c, ...saved };
         }
         try {
           const saved = JSON.parse(
@@ -62,7 +135,8 @@ export default function App() {
             Number.isFinite(saved.minOpacity) &&
             Number.isFinite(saved.maxScaleMultiple)
           )
-            c.cleanup = saved;
+            if (!readRoomEdits(scannedRoom?.worldId ?? "demo"))
+              c.cleanup = saved;
         } catch {}
         setConfig(c);
         setEditText(JSON.stringify(c, null, 2));
@@ -77,11 +151,13 @@ export default function App() {
             message: setToast,
             progress: setFraction,
             focus: setFocused,
-            failed: setFatal,
-            placed: (c) => {
-              setConfig(c);
-              setEditText(JSON.stringify(c, null, 2));
-            },
+            failed: (message) =>
+              setFatal(
+                scannedRoom
+                  ? `Could not load saved room ${scannedRoom.worldId}. ${message} Open Saved rooms to recover it by worldId.`
+                  : message,
+              ),
+            placed: rememberEdits,
             closed: () => {
               setClosed(true);
               setSolving(false);
@@ -98,7 +174,7 @@ export default function App() {
       live = false;
       engine.current?.dispose();
     };
-  }, [scannedRoom]);
+  }, [scannedRoom, reloadRoom]);
   useEffect(() => {
     all.current = [...clues, ...extras];
   }, [extras]);
@@ -111,7 +187,7 @@ export default function App() {
     engine.current.active = started && !closed;
     engine.current.suspended = panel === "scan";
     engine.current.blocked = !!panel || !!selected || solving || closed;
-  }, [started, panel, selected, solving, closed]);
+  }, [started, panel, selected, solving, closed, ready]);
   useEffect(() => {
     if (!started || closed) return;
     const t = setInterval(
@@ -143,7 +219,14 @@ export default function App() {
       document.body.style.overflow = "";
     };
   }, [started, panel, selected]);
-  function enterScannedRoom(room: SavedRoom) {
+  function selectRoom(room: RoomRecord | null) {
+    if (room) {
+      try {
+        activateRoom(room);
+      } catch {
+        setToast("Could not remember the active room in this browser.");
+      }
+    }
     setStarted(false);
     setClosed(false);
     setSolving(false);
@@ -154,10 +237,28 @@ export default function App() {
     setSelected(null);
     setElapsed(0);
     setFraction(null);
-    setPanel("brief");
+    setEditId("");
+    setPanel(room ? "brief" : "scan");
     setMode("Loading your capture");
-    setScannedRoom(room);
+    setScannedRoom(room ? { ...room } : null);
+    setReloadRoom((n) => n + 1);
     window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function enterScannedRoom(room: SavedRoom) {
+    try {
+      selectRoom(saveRoom(room, "Scanned room"));
+    } catch (error) {
+      setToast(String(error));
+    }
+  }
+  function removeRoom(worldId: string) {
+    try {
+      const next = deleteRoom(worldId);
+      if (scannedRoom?.worldId === worldId) selectRoom(next);
+      else setRooms(readRooms());
+    } catch {
+      setToast("Could not delete this room from browser storage.");
+    }
   }
   function pin() {
     if (!selected) return;
@@ -221,6 +322,22 @@ export default function App() {
       <div className="room-canvas" ref={host} />
       <div className="vignette" />
       <div className="grain" />
+      <nav className="room-library-bar" aria-label="Room library">
+        <button onClick={() => setPanel("rooms")}>
+          Saved rooms ({rooms.length})
+        </button>
+        {ready && (
+          <button aria-pressed={edit} onClick={toggleEdit}>
+            {edit ? "Play mode" : "Edit room"}
+          </button>
+        )}
+      </nav>
+      {fatal && panel !== "brief" && (
+        <div className="room-load-error" role="alert">
+          {fatal}
+          <button onClick={() => setPanel("rooms")}>Saved rooms</button>
+        </div>
+      )}
       {started && (
         <header className="topbar">
           <a className="brand" href="/" aria-label="RoomLock home">
@@ -397,11 +514,17 @@ export default function App() {
                     {scannedRoom && (
                       <button
                         className="outline"
-                        onClick={() => enterScannedRoom(scannedRoom)}
+                        onClick={() => selectRoom(scannedRoom)}
                       >
                         Retry room loading
                       </button>
                     )}
+                    <button
+                      className="outline"
+                      onClick={() => setPanel("rooms")}
+                    >
+                      Open saved rooms
+                    </button>
                   </>
                 )}
                 <p className="eyebrow">CONFIDENTIAL / CASE BRIEFING</p>
@@ -573,6 +696,15 @@ export default function App() {
               </div>
             )}
             {panel === "scan" && <ScanRoom onReady={enterScannedRoom} />}
+            {panel === "rooms" && (
+              <SavedRooms
+                rooms={rooms}
+                active={scannedRoom}
+                onSelect={selectRoom}
+                onDelete={removeRoom}
+                onScan={() => setPanel("scan")}
+              />
+            )}
             {panel === "create" && (
               <div className="modal-padding">
                 <p className="eyebrow">YOUR ROOM, NEXT</p>
@@ -637,7 +769,7 @@ export default function App() {
               <span>EVIDENCE FOUND</span>
             </div>
           </div>
-          <button className="primary" onClick={() => location.reload()}>
+          <button className="primary" onClick={() => selectRoom(scannedRoom)}>
             Reopen the case <span>↻</span>
           </button>
         </div>
@@ -645,6 +777,13 @@ export default function App() {
       {edit && config && (
         <aside className="editor">
           <strong>Placement mode</strong>
+          <button
+            disabled={!ready}
+            onClick={() => engine.current?.saveCameraSpawn()}
+          >
+            Save current camera as spawn
+          </button>
+          <button onClick={toggleEdit}>Return to play mode</button>
           <select
             aria-label="Object to place"
             value={editId}
@@ -683,8 +822,7 @@ export default function App() {
                     JSON.stringify(c.cleanup),
                   );
                 } catch {}
-                setConfig(c);
-                setEditText(JSON.stringify(c, null, 2));
+                rememberEdits(c);
               }}
             />
           </label>
@@ -707,8 +845,7 @@ export default function App() {
                     JSON.stringify(c.cleanup),
                   );
                 } catch {}
-                setConfig(c);
-                setEditText(JSON.stringify(c, null, 2));
+                rememberEdits(c);
               }}
             />
           </label>
@@ -729,24 +866,17 @@ export default function App() {
             onClick={() => {
               try {
                 const c = JSON.parse(editText);
-                engine.current?.setCrop(c.crop);
-                engine.current?.setCleanup(c.cleanup);
-                try {
-                  localStorage.setItem(
-                    "roomlock.cleanup." + c.url,
-                    JSON.stringify(c.cleanup),
-                  );
-                } catch {}
-                setConfig(c);
-                setToast(
-                  "Crop applied. Copy JSON to save it. Reload to apply other config changes.",
-                );
+                if (!rememberEdits(c)) return;
+                setReady(false);
+                setFatal("");
+                setReloadRoom((n) => n + 1);
+                setToast("Room edits saved and applied.");
               } catch {
                 setToast("Invalid JSON");
               }
             }}
           >
-            Apply crop / cleanup
+            Apply and save room
           </button>
           <button
             onClick={() => {

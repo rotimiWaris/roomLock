@@ -170,9 +170,10 @@ export class Room {
       this.scene.add(this.splat);
       await this.splat.initialized;
       if (this.disposed) return;
-      if (this.config.captured) this.fitCapturedRoom();
+      if (this.config.captured && !this.config.calibrated)
+        this.fitCapturedRoom();
       this.prepareCleanup();
-      if (this.config.captured) {
+      if (this.config.captured && !this.config.calibrated) {
         await this.spark.update({ scene: this.scene, camera: this.camera });
         if (this.disposed) return;
         this.placeCapturedEvidence();
@@ -473,6 +474,14 @@ export class Room {
     this.ambient.intensity = count >= 2 ? 0.4 : 1.2;
     if (this.splat) this.splat.recolor.setScalar(count >= 2 ? 0.65 : 1);
     this.footprints.visible = count >= 4;
+  }
+  saveCameraSpawn() {
+    this.config.camera = this.camera.position.toArray() as Vec3;
+    this.config.lookAt = this.camera.position
+      .clone()
+      .add(this.camera.getWorldDirection(new THREE.Vector3()))
+      .toArray() as Vec3;
+    this.hooks.placed(structuredClone(this.config));
   }
   setCrop(crop: RoomConfig["crop"]) {
     this.config.crop = structuredClone(crop);
