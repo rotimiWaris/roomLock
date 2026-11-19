@@ -1,0 +1,194 @@
+{
+  "name": "The Missing Heirloom",
+  "url": "/rooms/room.spz",
+  "rotation": [
+    -1.5707963267948966,
+    0,
+    0
+  ],
+  "scale": 1.5,
+  "offset": [
+    -0.55,
+    2.45,
+    2.5
+  ],
+  "camera": [
+    0,
+    1.5,
+    1.1
+  ],
+  "lookAt": [
+    0,
+    1.2,
+    -1
+  ],
+  "crop": {
+    "min": [
+      -2.8,
+      0,
+      -3
+    ],
+    "max": [
+      2.8,
+      2.8,
+      2.9
+    ]
+  },
+  "walkBounds": {
+    "min": [
+      -1.3,
+      0,
+      0.2
+    ],
+    "max": [
+      1.3,
+      2.8,
+      2.2
+    ]
+  },
+  "door": {
+    "position": [
+      0,
+      0,
+      -2.2
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "size": 2.8
+  },
+  "heirloom": {
+    "position": [
+      0,
+      0,
+      -5.2
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "size": 1.3
+  },
+  "footprints": [
+    [
+      -1.1,
+      0.08,
+      1.1
+    ],
+    [
+      -0.8,
+      0.08,
+      0.7
+    ],
+    [
+      -0.6,
+      0.08,
+      0.2
+    ],
+    [
+      -0.3,
+      0.08,
+      -0.8
+    ],
+    [
+      0,
+      0.08,
+      -1.7
+    ]
+  ],
+  "evidence": [
+    {
+      "id": "muddy-boot",
+      "position": [
+        -1.436,
+        0.331,
+        0.54
+      ],
+      "rotation": [
+        0,
+        0.6,
+        0
+      ],
+      "size": 0.3
+    },
+    {
+      "id": "cracked-vase",
+      "position": [
+        -1.045,
+        0.888,
+        -0.113
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": 0.25
+    },
+    {
+      "id": "torn-letter",
+      "position": [
+        2.302,
+        0.965,
+        1.489
+      ],
+      "rotation": [
+        -1.2,
+        0,
+        0
+      ],
+      "size": 0.2
+    },
+    {
+      "id": "music-box",
+      "position": [
+        1.381,
+        0.609,
+        -0.334
+      ],
+      "rotation": [
+        0,
+        -0.5,
+        0
+      ],
+      "size": 0.22
+    },
+    {
+      "id": "pocket-watch",
+      "position": [
+        0,
+        0.934,
+        -0.244
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": 0.05
+    },
+    {
+      "id": "jewelry-box",
+      "position": [
+        1.188,
+        1.001,
+        2.262
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "size": 0.15
+    }
+  ],
+  "walkRadius": 1,
+  "cleanup": {
+    "minOpacity": 0.02,
+    "maxScaleMultiple": 10,
+    "nearRadius": 0.3
+  }
+}

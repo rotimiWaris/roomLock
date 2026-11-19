@@ -1,0 +1,58 @@
+[
+  {
+    "file": "archway-door.glb",
+    "beforeBytes": 10410176,
+    "afterBytes": 450592,
+    "reductionPercent": 95.7,
+    "under3MB": true
+  },
+  {
+    "file": "cracked-vase.glb",
+    "beforeBytes": 7495032,
+    "afterBytes": 246852,
+    "reductionPercent": 96.7,
+    "under3MB": true
+  },
+  {
+    "file": "heirloom.glb",
+    "beforeBytes": 10196976,
+    "afterBytes": 492928,
+    "reductionPercent": 95.2,
+    "under3MB": true
+  },
+  {
+    "file": "jewelry-box.glb",
+    "beforeBytes": 13113504,
+    "afterBytes": 291668,
+    "reductionPercent": 97.8,
+    "under3MB": true
+  },
+  {
+    "file": "muddy-boot.glb",
+    "beforeBytes": 12666548,
+    "afterBytes": 448188,
+    "reductionPercent": 96.5,
+    "under3MB": true
+  },
+  {
+    "file": "music-box.glb",
+    "beforeBytes": 8248308,
+    "afterBytes": 454652,
+    "reductionPercent": 94.5,
+    "under3MB": true
+  },
+  {
+    "file": "pocket-watch.glb",
+    "beforeBytes": 11085604,
+    "afterBytes": 440440,
+    "reductionPercent": 96,
+    "under3MB": true
+  },
+  {
+    "file": "torn-letter.glb",
+    "beforeBytes": 9448976,
+    "afterBytes": 502708,
+    "reductionPercent": 94.7,
+    "under3MB": true
+  }
+]

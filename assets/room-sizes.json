@@ -1,0 +1,14 @@
+[
+  {
+    "variant": "web",
+    "bytes": 10706840,
+    "splats": 627448,
+    "shDegree": 3
+  },
+  {
+    "variant": "mobile",
+    "bytes": 5481646,
+    "splats": 313724,
+    "shDegree": 3
+  }
+]

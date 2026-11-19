@@ -1,0 +1,146 @@
+[
+  {
+    "name": "archway-door.glb",
+    "bytes": 450592,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "cracked-vase.glb",
+    "bytes": 246852,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "heirloom.glb",
+    "bytes": 492928,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "jewelry-box.glb",
+    "bytes": 291668,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "muddy-boot.glb",
+    "bytes": 448188,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "music-box.glb",
+    "bytes": 454652,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "pocket-watch.glb",
+    "bytes": 440440,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  },
+  {
+    "name": "torn-letter.glb",
+    "bytes": 502708,
+    "under3MB": true,
+    "meshoptDecoded": true,
+    "textures": [
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      },
+      {
+        "width": 1024,
+        "height": 1024,
+        "mime": "image/webp"
+      }
+    ]
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/plant.js": {
+      "maxDuration": 60
+    },
+    "api/plant-status.js": {
+      "maxDuration": 60
+    },
+    "api/scan.js": {
+      "maxDuration": 300
+    }
+  },
+  "headers": [
+    {
+      "source": "/models/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
+    {
+      "source": "/rooms/(.*)\\.spz",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    }
+  ]
+}

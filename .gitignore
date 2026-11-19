@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.vercel/
+assets/*status-log.json
+assets/task-ids.json
+assets/*.part
+assets/raw/*.part
+artifacts/
+public/ffmpeg/
