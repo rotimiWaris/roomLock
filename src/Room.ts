@@ -181,10 +181,14 @@ export class Room {
       if (this.config.captured && !this.config.calibrated)
         this.fitCapturedRoom();
       this.prepareCleanup();
-      if (this.config.captured && !this.config.calibrated) {
+      if (!this.config.evidenceEdited) {
         await this.spark.update({ scene: this.scene, camera: this.camera });
         if (this.disposed) return;
-        this.placeCapturedEvidence();
+        this.scatterEvidence(this.config.seed ?? 1);
+        if (this.config.captured && !this.config.calibrated)
+          this.hooks.message(
+            "Your room is ready. Clues are hidden at random; use New case for a fresh layout, or ?edit=1 to place them by hand.",
+          );
       }
     } catch (error) {
       if (this.disposed) return;
@@ -200,6 +204,8 @@ export class Room {
         return;
       }
       this.practiceRoom();
+      if (!this.config.evidenceEdited)
+        this.scatterEvidence(this.config.seed ?? 1);
       roomMode = "Practice room";
       if (!practice)
         this.hooks.message(
@@ -372,30 +378,118 @@ export class Room {
     this.portal.rotation.set(...this.config.door.rotation);
     this.treasure.position.fromArray(this.config.heirloom.position);
   }
-  private placeCapturedEvidence() {
-    this.config.evidence.forEach((placement, index) => {
-      const angle = (index * Math.PI) / 3 + 0.25;
-      const direction = new THREE.Vector3(
-        Math.sin(angle),
-        -0.9,
-        -Math.cos(angle),
-      ).normalize();
-      this.ray.set(this.camera.position, direction);
-      const hit = this.ray
-        .intersectObject(this.splat!)
-        .find((hit) => hit.distance > 0.5 && hit.distance < 2.4);
-      const position = hit
-        ? hit.point.clone().addScaledVector(direction, -0.04)
-        : this.camera.position
-            .clone()
-            .add(new THREE.Vector3(Math.sin(angle), 0, -Math.cos(angle)))
-            .setY(0.06);
-      placement.position = position.toArray();
-    });
-    this.hooks.placed(structuredClone(this.config));
-    this.hooks.message(
-      "Your room is ready with automatic placement. Use ?edit=1 to fine-tune the crop, camera, and clue positions.",
-    );
+  /**
+   * Hide the clues at random but sensible spots: on a surface the scan
+   * actually reconstructed, in front of the starting view, within reach of
+   * the walkable area, clear of walls and clutter, and apart from each other.
+   * The same seed always gives the same layout.
+   */
+  private scatterEvidence(seed: number) {
+    const random = seededRandom(seed);
+    const spawn = new THREE.Vector3(...this.config.camera);
+    const look = new THREE.Vector3(...this.config.lookAt).sub(spawn);
+    const heading = Math.atan2(look.x, -look.z);
+    const { min, max } = this.config.crop;
+    const reach = Math.min(2.6, this.config.walkRadius + 1.5);
+    const targets: THREE.Object3D[] = this.splat ? [this.splat] : this.surfaces;
+    const down = new THREE.Vector3(0, -1, 0);
+    const probe = new THREE.Raycaster();
+    const placed: THREE.Vector3[] = [];
+    const surfaceAt = (x: number, z: number) => {
+      probe.set(new THREE.Vector3(x, 1.45, z), down);
+      probe.far = 1.7;
+      const hit = probe
+        .intersectObjects(targets, false)
+        .find((h) => h.point.y > -0.15 && h.point.y < 1.25);
+      return hit ? hit.point.y : null;
+    };
+    // A down ray that lands on a wall face or a loose splat gives a height
+    // its neighbours don't share; a table top or floor gives the same one.
+    const flatSurfaceAt = (x: number, z: number) => {
+      const y = surfaceAt(x, z);
+      if (y === null || y > 1.05) return null;
+      for (const [dx, dz] of [
+        [0.12, 0],
+        [-0.12, 0],
+        [0, 0.12],
+        [0, -0.12],
+      ]) {
+        const near = surfaceAt(x + dx, z + dz);
+        if (near === null || Math.abs(near - y) > 0.07) return null;
+      }
+      return y;
+    };
+    const visible = (point: THREE.Vector3) => {
+      const target = point.clone().setY(point.y + 0.08);
+      const direction = target.clone().sub(spawn);
+      const distance = direction.length();
+      probe.set(spawn, direction.normalize());
+      probe.far = distance;
+      return !probe
+        .intersectObjects(targets, false)
+        .some(
+          (h) =>
+            h.distance > this.config.cleanup.nearRadius &&
+            h.distance < distance - 0.35,
+        );
+    };
+    const walk = this.config.walkBounds;
+    const span = (axis: 0 | 2) => {
+      const low = Math.max(min[axis] + 0.3, walk.min[axis] - reach);
+      const high = Math.min(max[axis] - 0.3, walk.max[axis] + reach);
+      return low < high ? [low, high] : [min[axis] + 0.3, max[axis] - 0.3];
+    };
+    const [x0, x1] = span(0);
+    let [z0, z1] = span(2);
+    // Rooms filmed from one side leave the player standing in front of the
+    // scan, so the open floor between them and the wall counts too.
+    if (spawn.z > max[2]) z1 = Math.max(z1, spawn.z - 0.9);
+    if (spawn.z < min[2]) z0 = Math.min(z0, spawn.z + 0.9);
+    const forward = new THREE.Vector2(Math.sin(heading), -Math.cos(heading));
+    const inFront = (p: THREE.Vector3) => {
+      const offset = new THREE.Vector2(p.x - spawn.x, p.z - spawn.z);
+      return (
+        offset.length() > 0.7 &&
+        offset.normalize().dot(forward) > Math.cos(THREE.MathUtils.degToRad(70))
+      );
+    };
+    for (const placement of this.config.evidence) {
+      placement.size = THREE.MathUtils.clamp(placement.size, 0.1, 0.6);
+      let chosen: THREE.Vector3 | null = null,
+        spaced: THREE.Vector3 | null = null,
+        any: THREE.Vector3 | null = null;
+      for (let attempt = 0; attempt < 60 && !chosen; attempt++) {
+        const candidate = new THREE.Vector3(
+          x0 + random() * (x1 - x0),
+          0,
+          z0 + random() * (z1 - z0),
+        );
+        if (!inFront(candidate)) continue;
+        any ??= candidate.clone();
+        if (placed.some((p) => p.distanceTo(candidate) < 0.8)) continue;
+        spaced ??= candidate.clone();
+        const y = attempt < 40 ? flatSurfaceAt(candidate.x, candidate.z) : 0;
+        if (y === null) continue;
+        candidate.y = y;
+        if (!visible(candidate)) continue;
+        chosen = candidate;
+      }
+      const point =
+        chosen ??
+        spaced ??
+        any ??
+        spawn.clone().add(new THREE.Vector3(forward.x, 0, forward.y));
+      if (!chosen) point.y = 0;
+      placed.push(point.clone().setY(0));
+      placement.position = point
+        .toArray()
+        .map((n) => Number(n.toFixed(3))) as Vec3;
+      placement.rotation = [
+        placement.rotation[0],
+        Number((random() * Math.PI * 2).toFixed(3)),
+        placement.rotation[2],
+      ];
+    }
   }
   async addEvidence(id: string, url: string, placement?: Placement) {
     let group = this.models.get(id);
@@ -441,13 +535,26 @@ export class Room {
       group.userData.loaded = true;
     } catch (error) {
       group.userData.loaded = false;
+      if (placement) {
+        // Keep the clue findable even if its model fails to download.
+        const stand = new THREE.Mesh(
+          new THREE.BoxGeometry(p.size * 0.8, p.size * 0.6, p.size * 0.8),
+          new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.85 }),
+        );
+        stand.position.y = p.size * 0.3;
+        const posed = new THREE.Group();
+        posed.add(stand);
+        group.add(posed);
+        group.userData.model = posed;
+        group.userData.loaded = true;
+      }
       if (!placement) {
         this.scene.remove(group);
         this.models.delete(id);
         throw error;
       }
       this.hooks.message(
-        `Model unavailable: ${id}. Reload once its web asset is ready.`,
+        `Model unavailable: ${id}. A placeholder marks the spot.`,
       );
     }
     const beacon = new THREE.Mesh(
@@ -912,6 +1019,7 @@ export class Room {
         if (p) {
           p.position = point.toArray().map((n) => Number(n.toFixed(3))) as Vec3;
           this.models.get(p.id)?.position.copy(point);
+          this.config.evidenceEdited = true;
           this.hooks.placed(structuredClone(this.config));
         }
       }
@@ -936,10 +1044,27 @@ export class Room {
       }
     }
   }
+  private highlight(id: string | null, on: boolean) {
+    const group = id ? this.models.get(id) : undefined;
+    if (!group) return;
+    group.userData.model?.traverse((object: THREE.Object3D) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      for (const material of materials)
+        if (material instanceof THREE.MeshStandardMaterial) {
+          material.emissive.set(on ? 0xffd27a : 0x000000);
+          material.emissiveIntensity = on ? 0.35 : 0;
+        }
+    });
+    const marker = group.getObjectByName("marker");
+    if (marker && !this.pinned.has(group.userData.id)) marker.visible = on;
+  }
   private evidenceInReach(): string | null {
     const hit = this.ray
       .intersectObjects([...this.models.values()], true)
-      .find((h) => h.distance <= 1.5);
+      .find((h) => h.distance <= 2.2);
     if (!hit) return null;
     if (this.splat) {
       const surface = this.ray
@@ -1007,6 +1132,8 @@ export class Room {
           ? this.evidenceInReach()
           : null;
       if (focused !== this.focused) {
+        this.highlight(this.focused, false);
+        this.highlight(focused, true);
         this.focused = focused;
         this.hooks.focus(focused);
       }
@@ -1119,4 +1246,15 @@ export function tone(kind: "pin" | "inspect" | "drop" | "solve") {
     o.start();
     o.stop(audio.currentTime + 0.32);
   } catch {}
+}
+
+export function seededRandom(seed: number) {
+  let state = seed >>> 0 || 1;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }

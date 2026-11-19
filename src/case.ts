@@ -8,6 +8,8 @@ export type Placement = {
 export type RoomConfig = {
   captured?: boolean;
   calibrated?: boolean;
+  evidenceEdited?: boolean;
+  seed?: number;
   upAxis?: "Y" | "Z";
   name: string;
   url: string;
